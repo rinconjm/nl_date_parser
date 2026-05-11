@@ -73,6 +73,10 @@ def test_month_arithmetic_clamps_to_valid_day() -> None:
     assert parse("1 month after January 31st, 2025") == date(2025, 2, 28)
 
 
+def test_compound_offset_before_absolute_date() -> None:
+    assert parse("2 years, 3 months before Dec. 1, 2025") == date(2023, 9, 1)
+
+
 def test_leading_on_the_absolute_date() -> None:
     assert parse("on the December 1st, 2025") == date(2025, 12, 1)
 

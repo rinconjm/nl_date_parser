@@ -123,20 +123,15 @@ _YEAR_SLASH_DATE_RE = re.compile(r"^(?P<year>\d{4})/(?P<month>\d{1,2})/(?P<day>\
 _SLASH_DATE_RE = re.compile(r"^(?P<month>\d{1,2})/(?P<day>\d{1,2})(?:/(?P<year>\d{2,4}))?$")
 _MONTH_DATE_RE = re.compile(r"^(?P<month>[a-z]+)\.?\s+(?P<day>\d{1,2})(?:,?\s+(?P<year>\d{2,4}))?$")
 _DATE_MONTH_RE = re.compile(r"^(?P<day>\d{1,2})\s+(?P<month>[a-z]+)\.?(?:,?\s+(?P<year>\d{2,4}))?$")
+_RELATIVE_AMOUNT_RE = re.compile(
+    rf"(?P<amount>{_AMOUNT_PATTERN})\s+(?P<unit>days?|weeks?|months?|years?)"
+)
 _RELATIVE_PREFIX_RE = re.compile(
-    rf"^(?P<amount>{_AMOUNT_PATTERN})\s+(?P<unit>days?|weeks?|months?|years?)\s+"
-    rf"(?P<direction>before|after)\s+(?P<target>.+)$"
+    r"^(?P<amounts>.+?)\s+(?P<direction>before|after)\s+(?P<target>.+)$"
 )
-_RELATIVE_IN_RE = re.compile(
-    rf"^in\s+(?P<amount>{_AMOUNT_PATTERN})\s+(?P<unit>days?|weeks?|months?|years?)$"
-)
-_RELATIVE_AGO_RE = re.compile(
-    rf"^(?P<amount>{_AMOUNT_PATTERN})\s+(?P<unit>days?|weeks?|months?|years?)\s+ago$"
-)
-_RELATIVE_FROM_NOW_RE = re.compile(
-    rf"^(?P<amount>{_AMOUNT_PATTERN})\s+(?P<unit>days?|weeks?|months?|years?)\s+"
-    rf"from\s+(?:now|today)$"
-)
+_RELATIVE_IN_RE = re.compile(r"^in\s+(?P<amounts>.+)$")
+_RELATIVE_AGO_RE = re.compile(r"^(?P<amounts>.+)\s+ago$")
+_RELATIVE_FROM_NOW_RE = re.compile(r"^(?P<amounts>.+)\s+from\s+(?:now|today)$")
 _NEXT_LAST_WEEKDAY_RE = re.compile(r"^(?P<direction>next|last)\s+(?P<weekday>[a-z]+)\.?$")
 _THIS_WEEKDAY_RE = re.compile(r"^this\s+(?P<weekday>[a-z]+)\.?$")
 
@@ -184,19 +179,31 @@ def _parse_normalized(s: str, today: date) -> date:
             return _add_years(today, -1)
 
     if match := _RELATIVE_PREFIX_RE.match(s):
-        amount = _relative_amount(match)
+        amounts = _relative_amounts(match.group("amounts"))
         direction = _Direction[match.group("direction").upper()]
         target = _parse_normalized(match.group("target"), today)
-        return _apply_relative(target, amount, direction)
+        return _apply_relative_amounts(target, amounts, direction)
 
     if match := _RELATIVE_IN_RE.match(s):
-        return _apply_relative(today, _relative_amount(match), _Direction.AFTER)
+        return _apply_relative_amounts(
+            today,
+            _relative_amounts(match.group("amounts")),
+            _Direction.AFTER,
+        )
 
     if match := _RELATIVE_AGO_RE.match(s):
-        return _apply_relative(today, _relative_amount(match), _Direction.BEFORE)
+        return _apply_relative_amounts(
+            today,
+            _relative_amounts(match.group("amounts")),
+            _Direction.BEFORE,
+        )
 
     if match := _RELATIVE_FROM_NOW_RE.match(s):
-        return _apply_relative(today, _relative_amount(match), _Direction.AFTER)
+        return _apply_relative_amounts(
+            today,
+            _relative_amounts(match.group("amounts")),
+            _Direction.AFTER,
+        )
 
     if match := _NEXT_LAST_WEEKDAY_RE.match(s):
         weekday = _parse_weekday(match.group("weekday"))
@@ -228,9 +235,30 @@ def _normalize(s: str) -> str:
     return normalized
 
 
-def _relative_amount(match: re.Match[str]) -> _RelativeAmount:
-    unit = _UNIT_ALIASES[match.group("unit")]
-    return _RelativeAmount(value=_parse_amount(match.group("amount")), unit=unit)
+def _relative_amounts(phrase: str) -> list[_RelativeAmount]:
+    text = phrase.replace(" and ", " ")
+    amounts: list[_RelativeAmount] = []
+    position = 0
+
+    while position < len(text):
+        if text[position].isspace():
+            position += 1
+            continue
+
+        match = _RELATIVE_AMOUNT_RE.match(text, position)
+        if match is None:
+            msg = f"Could not parse relative amount: {phrase!r}"
+            raise ValueError(msg)
+
+        unit = _UNIT_ALIASES[match.group("unit")]
+        amounts.append(_RelativeAmount(value=_parse_amount(match.group("amount")), unit=unit))
+        position = match.end()
+
+    if not amounts:
+        msg = f"Could not parse relative amount: {phrase!r}"
+        raise ValueError(msg)
+
+    return amounts
 
 
 def _parse_amount(amount: str) -> int:
@@ -258,6 +286,17 @@ def _apply_relative(base: date, amount: _RelativeAmount, direction: _Direction) 
 
     msg = f"Unsupported relative unit: {amount.unit!r}"
     raise ValueError(msg)
+
+
+def _apply_relative_amounts(
+    base: date,
+    amounts: list[_RelativeAmount],
+    direction: _Direction,
+) -> date:
+    result = base
+    for amount in amounts:
+        result = _apply_relative(result, amount, direction)
+    return result
 
 
 def _parse_weekday(weekday: str) -> int:
