@@ -104,26 +104,25 @@ _TENS: dict[str, int] = {
     "twenty": 20,
     "thirty": 30,
 }
-_NUMBER_WORDS: dict[str, int] = _SMALL_NUMBERS | _TENS | {
-    f"{tens_name} {small_name}": tens_value + small_value
-    for tens_name, tens_value in _TENS.items()
-    for small_name, small_value in _SMALL_NUMBERS.items()
-    if 1 <= small_value <= 9
-}
+_NUMBER_WORDS: dict[str, int] = (
+    _SMALL_NUMBERS
+    | _TENS
+    | {
+        f"{tens_name} {small_name}": tens_value + small_value
+        for tens_name, tens_value in _TENS.items()
+        for small_name, small_value in _SMALL_NUMBERS.items()
+        if 1 <= small_value <= 9
+    }
+)
 _AMOUNT_PATTERN = r"\d+|[a-z]+(?:[-\s][a-z]+)?"
 
 _ORDINAL_SUFFIX_RE = re.compile(r"(?<=\d)(st|nd|rd|th)\b", re.IGNORECASE)
 _WHITESPACE_RE = re.compile(r"\s+")
 _ISO_DATE_RE = re.compile(r"^(?P<year>\d{4})-(?P<month>\d{1,2})-(?P<day>\d{1,2})$")
-_SLASH_DATE_RE = re.compile(
-    r"^(?P<month>\d{1,2})/(?P<day>\d{1,2})(?:/(?P<year>\d{2,4}))?$"
-)
-_MONTH_DATE_RE = re.compile(
-    r"^(?P<month>[a-z]+)\.?\s+(?P<day>\d{1,2})(?:,?\s+(?P<year>\d{2,4}))?$"
-)
-_DATE_MONTH_RE = re.compile(
-    r"^(?P<day>\d{1,2})\s+(?P<month>[a-z]+)\.?(?:,?\s+(?P<year>\d{2,4}))?$"
-)
+_YEAR_SLASH_DATE_RE = re.compile(r"^(?P<year>\d{4})/(?P<month>\d{1,2})/(?P<day>\d{1,2})$")
+_SLASH_DATE_RE = re.compile(r"^(?P<month>\d{1,2})/(?P<day>\d{1,2})(?:/(?P<year>\d{2,4}))?$")
+_MONTH_DATE_RE = re.compile(r"^(?P<month>[a-z]+)\.?\s+(?P<day>\d{1,2})(?:,?\s+(?P<year>\d{2,4}))?$")
+_DATE_MONTH_RE = re.compile(r"^(?P<day>\d{1,2})\s+(?P<month>[a-z]+)\.?(?:,?\s+(?P<year>\d{2,4}))?$")
 _RELATIVE_PREFIX_RE = re.compile(
     rf"^(?P<amount>{_AMOUNT_PATTERN})\s+(?P<unit>days?|weeks?|months?|years?)\s+"
     rf"(?P<direction>before|after)\s+(?P<target>.+)$"
@@ -290,6 +289,13 @@ def _this_weekday(base: date, weekday: int) -> date:
 
 def _parse_absolute_date(s: str, today: date) -> date | None:
     if match := _ISO_DATE_RE.match(s):
+        return date(
+            year=int(match.group("year")),
+            month=int(match.group("month")),
+            day=int(match.group("day")),
+        )
+
+    if match := _YEAR_SLASH_DATE_RE.match(s):
         return date(
             year=int(match.group("year")),
             month=int(match.group("month")),

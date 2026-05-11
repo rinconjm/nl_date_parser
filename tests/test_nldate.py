@@ -13,6 +13,10 @@ def test_absolute_iso_date() -> None:
     assert parse("2025-12-01") == date(2025, 12, 1)
 
 
+def test_absolute_year_slash_date() -> None:
+    assert parse("2025/12/04") == date(2025, 12, 4)
+
+
 def test_absolute_slash_date_uses_reference_year() -> None:
     assert parse("12/1", today=date(2025, 6, 15)) == date(2025, 12, 1)
 
